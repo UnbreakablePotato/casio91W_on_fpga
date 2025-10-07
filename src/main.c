@@ -1,22 +1,15 @@
-/*
- * interrupt_counter_tut_2B.c
- *
- *  Version 1.2 Author : Edward Todirica
- *
- *  Created on: 	Unknown
- *      Author: 	Ross Elliot
- *     Version:		1.1
- */
-
 /********************************************************************************************
 
 * VERSION HISTORY
 ********************************************************************************************
-*   v1.2 - 10.11.2016
+*
+*   v1.3 07/10/2025 author: Sander Lange, Roni Khalil, Jacob Søgaard
+*
+*   v1.2 - 10.11.2016 author: Edward Todirica
 *		Fixed some bugs regarding Timer Interrupts and adding some
 *       debug messages for the Timer Interrupt Handler
 *
-* 	v1.1 - 01/05/2015
+* 	v1.1 - 01/05/2015 Ross Elliot
 * 		Updated for Zybo ~ DN
 *
 *	v1.0 - Unknown
