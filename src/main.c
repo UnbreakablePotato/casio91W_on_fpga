@@ -1,3 +1,28 @@
+/*
+ * interrupt_counter_tut_2B.c
+ *
+ *  Version 1.2 Author : Edward Todirica
+ *
+ *  Created on: 	Unknown
+ *      Author: 	Ross Elliot
+ *     Version:		1.1
+ */
+
+/********************************************************************************************
+
+* VERSION HISTORY
+********************************************************************************************
+*   v1.2 - 10.11.2016
+*		Fixed some bugs regarding Timer Interrupts and adding some
+*       debug messages for the Timer Interrupt Handler
+*
+* 	v1.1 - 01/05/2015
+* 		Updated for Zybo ~ DN
+*
+*	v1.0 - Unknown
+*		First version created.
+*******************************************************************************************/
+
 #include <stdio.h>
 #include "xparameters.h"
 #include "xgpio.h"
@@ -51,7 +76,7 @@ void SW_Intr_Handler(void *baseaddr_p);
 int InterruptSystemSetup(XScuGic *XScuGicInstancePtr);
 int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr);
 int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr);
-int SWIntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr);
+int SWIntcInitFunction(u16 DeviceId, XGpio *GpioInstancePtr);
 
 /*****************************************************************************/
 /**
@@ -296,7 +321,7 @@ int main (void)
 
 
   //Initialize interrupt controller
-   status = SWIntcInitFunction(INTC_DEVICE_ID,&TMRInst,&SWInst);
+   status = SWIntcInitFunction(INTC_DEVICE_ID,&SWInst);
    if(status != XST_SUCCESS) return XST_FAILURE;
 
   XTmrCtr_Start(&TMRInst, 0);
@@ -347,16 +372,11 @@ int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr){
 
 }
 
-int SWIntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr){
+int SWIntcInitFunction(u16 DeviceId, XGpio *GpioInstancePtr){
 
-	XScuGic_Config *IntcConfig;
 	int status;
-	u8 pri, trig;
 
-	// Interrupt controller initialisation
-	IntcConfig = XScuGic_LookupConfig(DeviceId);
-	status = XScuGic_CfgInitialize(&INTCInst, IntcConfig, IntcConfig->CpuBaseAddress);
-	if(status != XST_SUCCESS) return XST_FAILURE;
+
 
 	// Call to interrupt setup
 	status = InterruptSwitchSystemSetup(&INTCInst);
@@ -364,30 +384,17 @@ int SWIntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstanc
 
 
 	status = XScuGic_Connect(&INTCInst,
-			INTC_GPIO_INTERRUPT_ID,
+			INTC_SWGPIO_INTERRUPT_ID,
 			(Xil_ExceptionHandler)SW_Intr_Handler,
 			(void *)GpioInstancePtr);
 	if(status != XST_SUCCESS) return XST_FAILURE;
-
-	// Connect timer interrupt to handler
-		status = XScuGic_Connect(&INTCInst,
-								 INTC_TMR_INTERRUPT_ID,
-								// (Xil_ExceptionHandler)TMR_Intr_Handler,
-								 (Xil_ExceptionHandler) XTmrCtr_InterruptHandler,
-								 (void *)TmrInstancePtr);
-		if(status != XST_SUCCESS) return XST_FAILURE;
 
 		// Enable GPIO interrupts interrupt
 		XGpio_InterruptEnable(GpioInstancePtr, 1);
 		XGpio_InterruptGlobalEnable(GpioInstancePtr);
 
 		// Enable GPIO and timer interrupts in the controller
-		XScuGic_Enable(&INTCInst, INTC_GPIO_INTERRUPT_ID);
-		XScuGic_Enable(&INTCInst, INTC_TMR_INTERRUPT_ID);
-
-		xil_printf("Getting the Timer interrupt info\n\r");
-		XScuGic_GetPriTrigTypeByDistAddr(INTCInst.Config->DistBaseAddress, INTC_TMR_INTERRUPT_ID, &pri, &trig);
-		xil_printf("GPIO Interrupt-> Priority:%d, Trigger:%x\n\r", pri, trig);
+		XScuGic_Enable(&INTCInst, INTC_SWGPIO_INTERRUPT_ID);
 
 
 		//Set the timer interrupt as edge triggered
