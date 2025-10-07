@@ -53,6 +53,7 @@
 //#define C	0x2
 #define C	0x4
 #define L	0x8
+#define BTN_DEBOUNCE 1000000
 
 XGpio LEDInst, BTNInst, SWInst;
 XScuGic INTCInst;
@@ -140,44 +141,23 @@ void SW_Intr_Handler(void *InstancePtr){
 	switch	(sw_value) {
 	case 0x0:
 		SW_TMR_DELAY = 1;
-		led_data = 0x8;
-				led_data = 0x4;
-				led_data = 0x2;
-				led_data = 0x1;
-		break;
 	case 0x1:
 		SW_TMR_DELAY = 10;
-		led_data = 0x8;
-				led_data = 0x4;
-				led_data = 0x2;
-				led_data = 0x1;
 		break;
 	case 0x2:
 		SW_TMR_DELAY = 20;
-		led_data = 0x8;
-				led_data = 0x4;
-				led_data = 0x2;
-				led_data = 0x1;
 		break;
 	case 0x4:
 		SW_TMR_DELAY = 30;
-		led_data = 0x8;
-				led_data = 0x4;
-				led_data = 0x2;
-				led_data = 0x1;
 		break;
 	case 0x8:
 		SW_TMR_DELAY = 60;
-		led_data = 0x8;
-		led_data = 0x4;
-		led_data = 0x2;
-		led_data = 0x1;
 		break;
 	}
 
 	ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
 
-	XGpio_DiscreteWrite(&LEDInst, 1, sw_value | btn_value);
+	//XGpio_DiscreteWrite(&LEDInst, 1, sw_value | btn_value);
     // Enable GPIO interrupts
     XGpio_InterruptEnable(&SWInst, SW_INT);
 }
@@ -185,6 +165,9 @@ void SW_Intr_Handler(void *InstancePtr){
 
 void BTN_Intr_Handler(void *InstancePtr)
 {
+
+	volatile int btn_delay;
+
 	// Disable GPIO interrupts
 	XGpio_InterruptDisable(&BTNInst, BTN_INT);
 	// Ignore additional button presses
@@ -192,6 +175,9 @@ void BTN_Intr_Handler(void *InstancePtr)
 			BTN_INT) {
 			return;
 		}
+
+	for(btn_delay = 0; btn_delay < BTN_DEBOUNCE; btn_delay++);
+
 	btn_value = XGpio_DiscreteRead(&BTNInst, 1);
 	// Increment counter based on button value
 	// Reset if centre button pressed
@@ -234,7 +220,7 @@ void BTN_Intr_Handler(void *InstancePtr)
 
 	}
 
-    XGpio_DiscreteWrite(&LEDInst, 1, sw_value | btn_value);
+    XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     (void)XGpio_InterruptClear(&BTNInst, BTN_INT);
     // Enable GPIO interrupts
     XGpio_InterruptEnable(&BTNInst, BTN_INT);
