@@ -280,16 +280,16 @@ void setTime(){
 	int tmp_minutes;
     int tmp_seconds;
 
-    // determines the setting to adjust, for ex. i = 0 is seconds 
+    // determines the setting to adjust, for ex. i = 0 is seconds
     int i = 0;
-
-    //take current values
-    tmp_hours   = hours;
-    tmp_minutes = minutes;
-    tmp_seconds = seconds;
 
     while (1)
     {
+        //take current values
+        tmp_hours   = hours;
+        tmp_minutes = minutes;
+        tmp_seconds = seconds;
+
         // read button value
         btn_value = XGpio_DiscreteRead(&BTNInst, 1);
 
@@ -339,12 +339,14 @@ void setTime(){
 
         //sets variable to zero if we exceeds wanted value
         if (tmp_seconds >= 60) {
+        	tmp_minutes++;
         	tmp_seconds = 0;
         }
         if (tmp_hours >= 24) {
         	tmp_hours = 0;
         }
         if (tmp_minutes >= 60) {
+        	tmp_hours++;
         	tmp_minutes = 0;
         }
 
@@ -538,4 +540,3 @@ int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstanceP
 
 	return XST_SUCCESS;
 }
-
