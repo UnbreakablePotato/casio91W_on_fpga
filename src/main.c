@@ -68,9 +68,9 @@ void BTN_Intr_Handler(void *baseaddr_p);
 void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber);
 void SW_Intr_Handler(void *baseaddr_p);
 int InterruptSystemSetup(XScuGic *XScuGicInstancePtr);
-int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr);
+int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr, XGpio *GpioInstancePtr2);
 int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr);
-int SWIntcInitFunction(u16 DeviceId, XGpio *GpioInstancePtr);
+
 
 /*****************************************************************************/
 /**
@@ -131,6 +131,8 @@ void SW_Intr_Handler(void *InstancePtr){
 	sw_value = XGpio_DiscreteRead(&SWInst, 1);
 
 
+	int dontCare3 = 0x8 & sw_value; //Værdi 1xxx på switches ved at maske med and operator
+
 	switch	(sw_value) {
 	case 0x0:
 		SW_TMR_DELAY = 1;
@@ -148,9 +150,15 @@ void SW_Intr_Handler(void *InstancePtr){
 		break;
 	}
 
+	if(0x8 == dontCare3){
+		SW_TMR_DELAY = 60;
+	}
+
+
+
 	ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
 
-	//XGpio_DiscreteWrite(&LEDInst, 1, sw_value | btn_value);
+	//XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     // Enable GPIO interrupts
     XGpio_InterruptEnable(&SWInst, SW_INT);
 }
@@ -295,13 +303,13 @@ int main (void)
   XTmrCtr_SetOptions(&TMRInst, 0, XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION | XTC_DOWN_COUNT_OPTION);
 
   // Initialize interrupt controller
-  status = IntcInitFunction(INTC_DEVICE_ID, &TMRInst, &BTNInst);
+  status = IntcInitFunction(INTC_DEVICE_ID, &TMRInst, &BTNInst, &SWInst);
   if(status != XST_SUCCESS) return XST_FAILURE;
 
 
-  //Initialize interrupt controller
+  /*//Initialize interrupt controller
    status = SWIntcInitFunction(INTC_DEVICE_ID,&SWInst);
-   if(status != XST_SUCCESS) return XST_FAILURE;
+   if(status != XST_SUCCESS) return XST_FAILURE;*/
 
   XTmrCtr_Start(&TMRInst, 0);
   //Here we get the time when the timer first started
@@ -351,40 +359,9 @@ int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr){
 
 }
 
-int SWIntcInitFunction(u16 DeviceId, XGpio *GpioInstancePtr){
-
-	int status;
 
 
-
-	// Call to interrupt setup
-	status = InterruptSwitchSystemSetup(&INTCInst);
-	if(status != XST_SUCCESS) return XST_FAILURE;
-
-
-	status = XScuGic_Connect(&INTCInst,
-			INTC_SWGPIO_INTERRUPT_ID,
-			(Xil_ExceptionHandler)SW_Intr_Handler,
-			(void *)GpioInstancePtr);
-	if(status != XST_SUCCESS) return XST_FAILURE;
-
-		// Enable GPIO interrupts interrupt
-		XGpio_InterruptEnable(GpioInstancePtr, 1);
-		XGpio_InterruptGlobalEnable(GpioInstancePtr);
-
-		// Enable GPIO and timer interrupts in the controller
-		XScuGic_Enable(&INTCInst, INTC_SWGPIO_INTERRUPT_ID);
-
-
-		//Set the timer interrupt as edge triggered
-		//XScuGic_SetPriorityTriggerType(&INTCInst, INTC_TMR_INTERRUPT_ID, )
-
-		return XST_SUCCESS;
-}
-
-
-
-int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr)
+int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr, XGpio *GpioInstancePtr2)
 {
 	XScuGic_Config *IntcConfig;
 	int status;
@@ -406,11 +383,11 @@ int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstanceP
 					  	  	 (void *)GpioInstancePtr);
 	if(status != XST_SUCCESS) return XST_FAILURE;
 
-	/*status = XScuGic_Connect(&INTCInst,
-						  	  	 INTC_GPIO_INTERRUPT_ID,
+	status = XScuGic_Connect(&INTCInst,
+						  	  	 INTC_SWGPIO_INTERRUPT_ID,
 						  	  	 (Xil_ExceptionHandler)SW_Intr_Handler,
-						  	  	 (void *)GpioInstancePtr);
-		if(status != XST_SUCCESS) return XST_FAILURE;*/
+						  	  	 (void *)GpioInstancePtr2);
+		if(status != XST_SUCCESS) return XST_FAILURE;
 
 
 	// Connect timer interrupt to handler
@@ -424,6 +401,13 @@ int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstanceP
 	// Enable GPIO interrupts interrupt
 	XGpio_InterruptEnable(GpioInstancePtr, 1);
 	XGpio_InterruptGlobalEnable(GpioInstancePtr);
+
+	// Enable GPIO interrupts interrupt SWITCHES
+	XGpio_InterruptEnable(GpioInstancePtr2, 1);
+	XGpio_InterruptGlobalEnable(GpioInstancePtr2);
+
+	// Enable GPIO and timer interrupts in the controller
+	XScuGic_Enable(&INTCInst, INTC_SWGPIO_INTERRUPT_ID);
 
 	// Enable GPIO and timer interrupts in the controller
 	XScuGic_Enable(&INTCInst, INTC_GPIO_INTERRUPT_ID);
