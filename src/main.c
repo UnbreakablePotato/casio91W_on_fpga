@@ -1,4 +1,5 @@
-/********************************************************************************************
+/*
+ /********************************************************************************************
 
 * VERSION HISTORY
 ********************************************************************************************
@@ -132,6 +133,10 @@ void SW_Intr_Handler(void *InstancePtr){
 
 
 	int dontCare3 = 0x8 & sw_value; //Værdi 1xxx på switches ved at maske med and operator
+	int dontCare2 = 0x4 & sw_value;
+	int dontCare1 = 0x2 & sw_value;
+	int dontCare0 = 0x1 & sw_value;
+	int normalSpeed = 0x0 & sw_value;
 
 	switch	(sw_value) {
 	case 0x0:
@@ -152,13 +157,26 @@ void SW_Intr_Handler(void *InstancePtr){
 
 	if(0x8 == dontCare3){
 		SW_TMR_DELAY = 60;
+		led_data = 0x8;
+	}else if(0x4 == dontCare2){
+		SW_TMR_DELAY = 30;
+		led_data = 0x4;
+	}else if(0x2 == dontCare1){
+		SW_TMR_DELAY = 20;
+		led_data = 0x2;
+	}else if(0x1 == dontCare0){
+		SW_TMR_DELAY = 10;
+		led_data = 0x1;
+	}else if(0x0 == normalSpeed){
+		SW_TMR_DELAY = 1;
+		led_data = 0x0;
 	}
 
 
 
 	ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
 
-	//XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     // Enable GPIO interrupts
     XGpio_InterruptEnable(&SWInst, SW_INT);
 }
@@ -221,7 +239,7 @@ void BTN_Intr_Handler(void *InstancePtr)
 
 	}
 
-    XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+    //XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     (void)XGpio_InterruptClear(&BTNInst, BTN_INT);
     // Enable GPIO interrupts
     XGpio_InterruptEnable(&BTNInst, BTN_INT);
