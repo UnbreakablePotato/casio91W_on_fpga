@@ -18,6 +18,7 @@
 *******************************************************************************************/
 
 #include <stdio.h>
+#include <string.h>
 #include "xparameters.h"
 #include "xgpio.h"
 #include "xtmrctr.h"
@@ -49,14 +50,19 @@
 #define L	0x8
 #define BTN_DEBOUNCE 1000000
 
+//global viables for clock
+volatile int hours = 0;
+volatile int minutes = 0;
+volatile int seconds = 0;
+
 XGpio LEDInst, BTNInst, SWInst;
 XScuGic INTCInst;
 //XTmrCtr TMRInst;
 int SW_TMR_DELAY;
 int ACTUAL_TIMER;
 static int led_data;
-static int btn_value;
-static int btn_count;
+volatile int btn_count = 1;
+volatile int btn_value = 0;
 static int sw_value;
 //static int tmr_count;
 
@@ -71,6 +77,7 @@ void SW_Intr_Handler(void *baseaddr_p);
 int InterruptSystemSetup(XScuGic *XScuGicInstancePtr);
 int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr, XGpio *GpioInstancePtr2);
 int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr);
+void setTime();
 
 
 /*****************************************************************************/
@@ -138,7 +145,7 @@ void SW_Intr_Handler(void *InstancePtr){
 	int dontCare0 = 0x1 & sw_value;
 	int normalSpeed = 0x0 & sw_value;
 
-	switch	(sw_value) {
+	/*switch	(sw_value) {
 	case 0x0:
 		SW_TMR_DELAY = 1;
 	case 0x1:
@@ -153,30 +160,30 @@ void SW_Intr_Handler(void *InstancePtr){
 	case 0x8:
 		SW_TMR_DELAY = 60;
 		break;
-	}
+	}*/
 
 	if(0x8 == dontCare3){
 		SW_TMR_DELAY = 60;
-		led_data = 0x8;
+		//led_data = 0x8;
 	}else if(0x4 == dontCare2){
 		SW_TMR_DELAY = 30;
-		led_data = 0x4;
+		//led_data = 0x4;
 	}else if(0x2 == dontCare1){
 		SW_TMR_DELAY = 20;
-		led_data = 0x2;
+		//led_data = 0x2;
 	}else if(0x1 == dontCare0){
 		SW_TMR_DELAY = 10;
-		led_data = 0x1;
+		//led_data = 0x1;
 	}else if(0x0 == normalSpeed){
 		SW_TMR_DELAY = 1;
-		led_data = 0x0;
+		//led_data = 0x0;
 	}
 
 
 
 	ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
 
-	XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	//XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     // Enable GPIO interrupts
     XGpio_InterruptEnable(&SWInst, SW_INT);
 }
@@ -208,35 +215,6 @@ void BTN_Intr_Handler(void *InstancePtr)
 
 	if(btn_count > 4){
 		btn_count = 1;
-	}
-
-	switch (btn_count) {
-	case 1:
-		led_data = 0x8;
-		break;
-	case 2:
-		led_data=0x4;
-		break;
-	case 3:
-		led_data=0x2;
-		break;
-	case 4:
-		led_data=0x1;
-		break;
-	}
-
-	if(btn_count == 1){
-		if(btn_value == A){
-			//SKIFT MELLEM 24H/PM
-		} else if(btn_value == L){
-			printf("Light is on\n");
-		}
-	}else if(btn_count == 2){
-
-	}else if(btn_count == 3){
-
-	}else if(btn_count == 4){
-
 	}
 
     //XGpio_DiscreteWrite(&LEDInst, 1, led_data);
@@ -279,8 +257,107 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 
 	}
 
+	if (TmrCtrNumber == 0) {
+	        seconds++;
+	        if (seconds >= 60) {
+	            seconds = 0;
+	            if (++minutes >= 60) {
+	                minutes = 0;
+	                hours = (hours + 1) % 24;
+	            }
+	        }
+
+	        xil_printf("%d hours %d minutes %d seconds \n", hours, minutes, seconds);
+	    }
+
 	XTmrCtr_ClearInterruptFlag(pTMRInst, TmrCtrNumber);
 }
+
+void setTime(){
+
+	//temporary variables so we can safely change them without disturbing the timer interrupt
+	int tmp_hours;
+	int tmp_minutes;
+    int tmp_seconds;
+
+    // determines the setting to adjust, for ex. i = 0 is seconds 
+    int i = 0;
+
+    //take current values
+    tmp_hours   = hours;
+    tmp_minutes = minutes;
+    tmp_seconds = seconds;
+
+    while (1)
+    {
+        // read button value
+        btn_value = XGpio_DiscreteRead(&BTNInst, 1);
+
+        // exit if next mode is chosen
+        if (btn_count != 4) {
+            break;
+        }
+
+        // seconds
+        if (i == 0) {
+        	//increments variable
+            if (btn_value == A) {
+                tmp_seconds++;
+
+                // debounce so one press = one increment, important. without it we increment several times
+                while (XGpio_DiscreteRead(&BTNInst, 1) == A);
+            }
+            //change variable/setting to adjust
+            if (btn_value == L) {
+                i++;
+                while (XGpio_DiscreteRead(&BTNInst, 1) == L);
+            }
+        }
+        // hours
+        else if (i == 1) {
+            if (btn_value == A) {
+                tmp_hours++;
+
+                while (XGpio_DiscreteRead(&BTNInst, 1) == A);
+            }
+            if (btn_value == L) {
+                i++;
+                while (XGpio_DiscreteRead(&BTNInst, 1) == L);
+            }
+        }
+        // minutes
+        else if (i == 2) {
+            if (btn_value == A) {
+                tmp_minutes++;
+                while (XGpio_DiscreteRead(&BTNInst, 1) == A);
+            }
+            if (btn_value == L) {
+                i = 0;
+                while (XGpio_DiscreteRead(&BTNInst, 1) == L);
+            }
+        }
+
+        //sets variable to zero if we exceeds wanted value
+        if (tmp_seconds >= 60) {
+        	tmp_seconds = 0;
+        }
+        if (tmp_hours >= 24) {
+        	tmp_hours = 0;
+        }
+        if (tmp_minutes >= 60) {
+        	tmp_minutes = 0;
+        }
+
+        //sets changes setting to clock
+        hours = tmp_hours;
+        minutes = tmp_minutes;
+        seconds = tmp_seconds;
+    }
+
+    return;
+
+}
+
 
 
 
@@ -333,8 +410,28 @@ int main (void)
   //Here we get the time when the timer first started
   XTime_GetTime(&tStart);
 
-  while(1);
-
+  while(1){
+	  switch (btn_count) {
+	  	case 1:
+	  		led_data = 0x8;
+	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	  		//specific mode function
+	  		break;
+	  	case 2:
+	  		led_data=0x4;
+	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	  		break;
+	  	case 3:
+	  		led_data=0x2;
+	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	  		break;
+	  	case 4:
+	  		led_data=0x1;
+	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	  		setTime();
+	  		break;
+	  	}
+  }
 
   return 0;
 }
@@ -441,3 +538,4 @@ int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstanceP
 
 	return XST_SUCCESS;
 }
+
