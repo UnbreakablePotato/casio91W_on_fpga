@@ -39,7 +39,8 @@
 
 #define BTN_INT 			XGPIO_IR_CH1_MASK
 //#define TMR_LOAD			0xF8000000
-#define TMR_LOAD			100000000
+//#define TMR_LOAD		    100000000
+
 
 //Vores defines
 #define INTC_SWGPIO_INTERRUPT_ID XPAR_FABRIC_AXI_GPIO_2_IP2INTC_IRPT_INTR
@@ -57,7 +58,7 @@ volatile int seconds = 0;
 
 XGpio LEDInst, BTNInst, SWInst;
 XScuGic INTCInst;
-//XTmrCtr TMRInst;
+XTmrCtr TMRInst;
 int SW_TMR_DELAY;
 int ACTUAL_TIMER;
 static int led_data;
@@ -65,6 +66,8 @@ volatile int btn_count = 1;
 volatile int btn_value = 0;
 static int sw_value;
 //static int tmr_count;
+
+int TMR_LOAD = 100000000;
 
 XTime tStart, tEnd;
 
@@ -143,45 +146,23 @@ void SW_Intr_Handler(void *InstancePtr){
 	int dontCare2 = 0x4 & sw_value;
 	int dontCare1 = 0x2 & sw_value;
 	int dontCare0 = 0x1 & sw_value;
-	int normalSpeed = 0x0 & sw_value;
-
-	/*switch	(sw_value) {
-	case 0x0:
-		SW_TMR_DELAY = 1;
-	case 0x1:
-		SW_TMR_DELAY = 10;
-		break;
-	case 0x2:
-		SW_TMR_DELAY = 20;
-		break;
-	case 0x4:
-		SW_TMR_DELAY = 30;
-		break;
-	case 0x8:
-		SW_TMR_DELAY = 60;
-		break;
-	}*/
 
 	if(0x8 == dontCare3){
-		SW_TMR_DELAY = 60;
-		//led_data = 0x8;
+		TMR_LOAD = 100000000 / 60;
 	}else if(0x4 == dontCare2){
-		SW_TMR_DELAY = 30;
-		//led_data = 0x4;
+		TMR_LOAD = 100000000 / 30;
 	}else if(0x2 == dontCare1){
-		SW_TMR_DELAY = 20;
-		//led_data = 0x2;
+		TMR_LOAD = 100000000 / 20;
 	}else if(0x1 == dontCare0){
-		SW_TMR_DELAY = 10;
-		//led_data = 0x1;
-	}else if(0x0 == normalSpeed){
-		SW_TMR_DELAY = 1;
-		//led_data = 0x0;
+		TMR_LOAD = 100000000 / 10;
+	}else{
+		TMR_LOAD = 100000000;
 	}
 
+	XTmrCtr_SetResetValue(&TMRInst, 0, TMR_LOAD);
 
 
-	ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
+	//ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
 
 	//XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     // Enable GPIO interrupts
@@ -274,21 +255,11 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 }
 
 void setTime(){
-
-	//temporary variables so we can safely change them without disturbing the timer interrupt
-	int tmp_hours;
-	int tmp_minutes;
-    int tmp_seconds;
-
     // determines the setting to adjust, for ex. i = 0 is seconds
     int i = 0;
 
     while (1)
     {
-        //take current values
-        tmp_hours   = hours;
-        tmp_minutes = minutes;
-        tmp_seconds = seconds;
 
         // read button value
         btn_value = XGpio_DiscreteRead(&BTNInst, 1);
@@ -302,7 +273,7 @@ void setTime(){
         if (i == 0) {
         	//increments variable
             if (btn_value == A) {
-                tmp_seconds++;
+                seconds++;
 
                 // debounce so one press = one increment, important. without it we increment several times
                 while (XGpio_DiscreteRead(&BTNInst, 1) == A);
@@ -316,7 +287,7 @@ void setTime(){
         // hours
         else if (i == 1) {
             if (btn_value == A) {
-                tmp_hours++;
+                hours++;
 
                 while (XGpio_DiscreteRead(&BTNInst, 1) == A);
             }
@@ -328,7 +299,7 @@ void setTime(){
         // minutes
         else if (i == 2) {
             if (btn_value == A) {
-                tmp_minutes++;
+                minutes++;
                 while (XGpio_DiscreteRead(&BTNInst, 1) == A);
             }
             if (btn_value == L) {
@@ -338,22 +309,18 @@ void setTime(){
         }
 
         //sets variable to zero if we exceeds wanted value
-        if (tmp_seconds >= 60) {
-        	tmp_minutes++;
-        	tmp_seconds = 0;
+        if (seconds >= 60) {
+        	minutes++;
+        	seconds = 0;
         }
-        if (tmp_hours >= 24) {
-        	tmp_hours = 0;
+        if (hours >= 24) {
+        	hours = 0;
         }
-        if (tmp_minutes >= 60) {
-        	tmp_hours++;
-        	tmp_minutes = 0;
+        if (minutes >= 60) {
+        	hours++;
+        	minutes = 0;
         }
 
-        //sets changes setting to clock
-        hours = tmp_hours;
-        minutes = tmp_minutes;
-        seconds = tmp_seconds;
     }
 
     return;
@@ -369,7 +336,7 @@ void setTime(){
 int main (void)
 {
   int status;
-  XTmrCtr TMRInst;
+  //XTmrCtr TMRInst;
   //----------------------------------------------------
   // INITIALIZE THE PERIPHERALS & SET DIRECTIONS OF GPIO
   //----------------------------------------------------
