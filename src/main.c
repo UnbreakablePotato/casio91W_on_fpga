@@ -57,7 +57,8 @@ static int led_data;
 volatile int btn_value = 0;
 volatile int btn_count = 1;
 static int sw_value;
-volatile int stopWatchBTN_CNT = 0;
+volatile int on;
+int stopWatchBTN_CNT = 0;
 //static int tmr_count;
 
 int TMR_LOAD = 100000000;
@@ -70,7 +71,7 @@ volatile int hours = 0;
 //global variables for stopWatch
 volatile int stopWatchSeconds = 0;
 volatile int stopWatchMinutes = 0;
-volatile int stopWatchHours = 0;;
+volatile int stopWatchHours = 0;
 
 XTime tStart, tEnd;
 
@@ -113,15 +114,19 @@ void stopWatch()
 
 	stopWatchBTN_CNT = 0;
 
+	volatile int btn_delay;
 
 	while(1){
+		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE; btn_delay++);
+
+		btn_value = XGpio_DiscreteRead(&BTNInst, 1);
 
 		if(btn_count != 3){
 			break;
 		}
 
 		if(btn_value == A){
-			stopWatchBTN_CNT++;
+			on = 1;
 		}
 
 		if(btn_value == L){
@@ -130,10 +135,16 @@ void stopWatch()
 			stopWatchHours = 0;
 		}
 
-		if(stopWatchBTN_CNT == 1){
+		/*if(stopWatchBTN_CNT == 1){
 			continue;
-		}else if(stopWatchBTN_CNT == 2){
-			stopWatchBTN_CNT--;
+		}*/
+
+		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE; btn_delay++);
+
+		btn_value = XGpio_DiscreteRead(&BTNInst, 1);
+
+		if(btn_value == A && on == 1){
+			on = 0;
 		}
 
 
@@ -289,7 +300,7 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 	        xil_printf("hours %d minutes %d seconds %d\n", hours, minutes, seconds);
 	    }
 
-	if(TmrCtrNumber == 0 && btn_count == 3 && stopWatchBTN_CNT == 1){
+	if(TmrCtrNumber == 0 && btn_count == 3 && on == 1){
 			stopWatchSeconds++;
 						if (stopWatchSeconds >= 60) {
 							stopWatchSeconds = 0;
