@@ -50,6 +50,7 @@
 #define C	0x4
 #define L	0x8
 #define BTN_DEBOUNCE 1000000
+#define BTN_DEBOUNCE_TIME 7000000
 
 //global viables for clock
 volatile int hours = 0;
@@ -66,6 +67,7 @@ volatile int btn_count = 1;
 volatile int btn_value = 0;
 static int sw_value;
 //static int tmr_count;
+volatile int btn_delay;
 
 int TMR_LOAD = 100000000;
 
@@ -173,8 +175,6 @@ void SW_Intr_Handler(void *InstancePtr){
 void BTN_Intr_Handler(void *InstancePtr)
 {
 
-	volatile int btn_delay;
-
 	// Disable GPIO interrupts
 	XGpio_InterruptDisable(&BTNInst, BTN_INT);
 	// Ignore additional button presses
@@ -256,6 +256,9 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 
 void setTime(){
     // determines the setting to adjust, for ex. i = 0 is seconds
+	int tmp_seconds;
+	int tmptmp_seconds;
+	int flagSec = 0;
     int i = 0;
 
     while (1)
@@ -274,37 +277,78 @@ void setTime(){
         	//increments variable
             if (btn_value == A) {
                 seconds++;
-
+                tmp_seconds = seconds;
+                tmptmp_seconds = tmp_seconds;
                 // debounce so one press = one increment, important. without it we increment several times
-                while (XGpio_DiscreteRead(&BTNInst, 1) == A);
+                while (XGpio_DiscreteRead(&BTNInst, 1) == A){
+                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+                		flagSec = 1;
+                		seconds++;
+                        if (seconds >= 60) {
+                        	minutes++;
+                        	seconds = 0;
+                        }
+                		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+                	}
+                	tmp_seconds = seconds;
+                }
+                flagSec = 0;
             }
             //change variable/setting to adjust
             if (btn_value == L) {
                 i++;
-                while (XGpio_DiscreteRead(&BTNInst, 1) == L);
+                for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
         // hours
         else if (i == 1) {
             if (btn_value == A) {
                 hours++;
-
-                while (XGpio_DiscreteRead(&BTNInst, 1) == A);
+                tmp_seconds = seconds;
+                tmptmp_seconds = tmp_seconds;
+                // debounce so one press = one increment, important. without it we increment several times
+                while (XGpio_DiscreteRead(&BTNInst, 1) == A){
+                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+                		flagSec = 1;
+                		hours++;
+                        if (hours >= 24) {
+                        	hours = 0;
+                        }
+                		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+                	}
+                	tmp_seconds = seconds;
+                }
+                flagSec = 0;
             }
             if (btn_value == L) {
                 i++;
-                while (XGpio_DiscreteRead(&BTNInst, 1) == L);
+                for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
         // minutes
         else if (i == 2) {
             if (btn_value == A) {
                 minutes++;
-                while (XGpio_DiscreteRead(&BTNInst, 1) == A);
+                tmp_seconds = seconds;
+                tmptmp_seconds = tmp_seconds;
+                // debounce so one press = one increment, important. without it we increment several times
+                while (XGpio_DiscreteRead(&BTNInst, 1) == A){
+                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+                		flagSec = 1;
+                		minutes++;
+                        if (minutes >= 60) {
+                        	hours++;
+                        	minutes = 0;
+                        }
+                		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+                	}
+                	tmp_seconds = seconds;
+                }
+                flagSec = 0;
             }
             if (btn_value == L) {
                 i = 0;
-                while (XGpio_DiscreteRead(&BTNInst, 1) == L);
+                for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
 
