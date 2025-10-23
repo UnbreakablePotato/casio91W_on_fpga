@@ -18,7 +18,6 @@
 *******************************************************************************************/
 
 #include <stdio.h>
-#include <string.h>
 #include "xparameters.h"
 #include "xgpio.h"
 #include "xtmrctr.h"
@@ -26,9 +25,7 @@
 #include "xil_exception.h"
 #include "xil_printf.h"
 #include "xtime_l.h"
-
 #include "xuartps.h"
-
 
     char zero[5][5] = {
         {'0','0','0','0','0'},
@@ -100,8 +97,8 @@
         {' ',' ',' ',' ','0'},
         {' ',' ',' ',' ','0'}
     };
-
-    char (*digits[10])[5] = { zero, one, two, three, four, five, six, seven, eight, nine };
+//
+char (*digits[10])[5] = { zero, one, two, three, four, five, six, seven, eight, nine };
 
 // Parameter definitions
 #define INTC_DEVICE_ID 		XPAR_PS7_SCUGIC_0_DEVICE_ID
@@ -115,7 +112,7 @@
 
 #define BTN_INT 			XGPIO_IR_CH1_MASK
 //#define TMR_LOAD			0xF8000000
-//#define TMR_LOAD		    100000000
+//#define TMR_LOAD			100000000
 
 
 //Vores defines
@@ -125,20 +122,11 @@
 //#define C	0x2
 #define C	0x4
 #define L	0x8
-#define BTN_DEBOUNCE 5000000
+#define BTN_DEBOUNCE 3000000
+#define BTN_DEBOUNCE_STOPWATCH  15000000
+
 #define BTN_DEBOUNCE_TIME 7000000
-
-//global viables for clock
-volatile int hunderdel = 0;
-volatile int hours     = 0;
-volatile int minutes   = 0;
-volatile int seconds   = 0;
-
-//global variables for stopWatch
-
-volatile int stopWatch100thSecond = 0;
-volatile int stopWatchSeconds = 0;
-volatile int stopWatchMinutes = 0;
+volatile int btn_delay;
 
 XGpio LEDInst, BTNInst, SWInst;
 XScuGic INTCInst;
@@ -146,16 +134,29 @@ XTmrCtr TMRInst;
 int SW_TMR_DELAY;
 int ACTUAL_TIMER;
 static int led_data;
-volatile int btn_count = 1;
 volatile int btn_value = 0;
+volatile int btn_count = 1;
 static int sw_value;
-//static int tmr_count;
-volatile int btn_delay;
 volatile int on;
-
-int flagSec = 0;
+int stopWatchBTN_CNT = 0;
+//static int tmr_count;
 
 int TMR_LOAD = 1000000;
+//volatile int TMR_STOP_LOAD = 1000000;
+
+//global viables for clock
+volatile int seconds = 0;
+volatile int minutes = 0;
+volatile int hours = 0;
+
+//global variables for stopWatch
+volatile int stopWatch100thSecond = 0;
+volatile int stopWatchSeconds = 0;
+volatile int stopWatchMinutes = 0;
+int lastBtnValue = 0;
+int setting = 0;
+int flagSec = 0;
+
 
 XTime tStart, tEnd;
 
@@ -168,8 +169,8 @@ void SW_Intr_Handler(void *baseaddr_p);
 int InterruptSystemSetup(XScuGic *XScuGicInstancePtr);
 int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr, XGpio *GpioInstancePtr2);
 int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr);
-void setTime();
 void stopWatch();
+void setTime();
 void printDigits(int hour, int minute, int second);
 
 
@@ -199,7 +200,7 @@ void printDigits(int hour, int minute, int second) {
     int s1 = second / 10;
     int s2 = second % 10;
 
-    xil_printf("\033[H\033[J"); // fjerne alt på skærmen, virker ikke i sdk terminal, kun på puTTy terminal
+    xil_printf("\033[J\033[H"); // fjerne alt på skærmen, virker ikke i sdk terminal, kun på puTTy terminal
     for (int i = 0; i < 5; i++) {
         // Timer
         for (int j = 0; j < 5; j++) xil_printf("%c", digits[h1][i][j]);
@@ -218,18 +219,24 @@ void printDigits(int hour, int minute, int second) {
         xil_printf(" ");
         for (int j = 0; j < 5; j++) xil_printf("%c", digits[s2][i][j]);
 
+
         xil_printf("\r\n"); // det går helt galt hvis /r ikke er der
     }
+
 }
+
+
 
 void stopWatch()
 {
 	stopWatch100thSecond = 0;
 	stopWatchSeconds = 0;
 	stopWatchMinutes = 0;
+	printDigits(stopWatchMinutes, stopWatchSeconds, stopWatch100thSecond);
+
 
 	while(1){
-		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE; btn_delay++);
+		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_STOPWATCH; btn_delay++);
 
 		btn_value = XGpio_DiscreteRead(&BTNInst, 1);
 
@@ -237,32 +244,20 @@ void stopWatch()
 			break;
 		}
 
-		if(btn_value == A){
+		if(btn_value == A && on != 1){
 			on = 1;
-		}
-
-		if(btn_value == L){
+		} else if (btn_value == A && on == 1){
+			on = 0;
+		} else if(btn_value == L){
 			stopWatch100thSecond = 0;
 			stopWatchSeconds = 0;
 			stopWatchMinutes = 0;
-
-		}
-
-		/*if(stopWatchBTN_CNT == 1){
-			continue;
-		}*/
-
-		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE; btn_delay++);
-
-		btn_value = XGpio_DiscreteRead(&BTNInst, 1);
-
-		if(btn_value == A && on == 1){
+			printDigits(stopWatchMinutes, stopWatchSeconds, stopWatch100thSecond);
 			on = 0;
+
 		}
 	}
 }
-
-
 
 void XTmrCtr_ClearInterruptFlag(XTmrCtr * InstancePtr, u8 TmrCtrNumber)
 {
@@ -312,21 +307,21 @@ void SW_Intr_Handler(void *InstancePtr){
 	int dontCare0 = 0x1 & sw_value;
 
 	if(0x8 == dontCare3){
-		TMR_LOAD = 1000000 / 60;
+		TMR_LOAD = 16667;
 	}else if(0x4 == dontCare2){
-		TMR_LOAD = 1000000 / 30;
+		TMR_LOAD = 33333;
 	}else if(0x2 == dontCare1){
-		TMR_LOAD = 1000000 / 20;
+		TMR_LOAD = 50000;
 	}else if(0x1 == dontCare0){
-		TMR_LOAD = 1000000 / 10;
+		TMR_LOAD = 100000;
 	}else{
 		TMR_LOAD = 1000000;
 	}
 
-	XTmrCtr_SetResetValue(&TMRInst, 0, TMR_LOAD);
+	//1000000
+	//1000000
 
-
-	//ACTUAL_TIMER = TMR_LOAD * SW_TMR_DELAY;
+	  XTmrCtr_SetResetValue(&TMRInst, 0, TMR_LOAD);
 
 	//XGpio_DiscreteWrite(&LEDInst, 1, led_data);
     // Enable GPIO interrupts
@@ -336,6 +331,8 @@ void SW_Intr_Handler(void *InstancePtr){
 
 void BTN_Intr_Handler(void *InstancePtr)
 {
+
+	volatile int btn_delay;
 
 	// Disable GPIO interrupts
 	XGpio_InterruptDisable(&BTNInst, BTN_INT);
@@ -420,7 +417,7 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 	else {  //Handle interrupts generated by timer 1
 
 	}
-	if (TmrCtrNumber == 0 && btn_count !=3) {
+	if (TmrCtrNumber == 0) {
 		stopWatch100thSecond++;
 		if(stopWatch100thSecond >= 99){
 			stopWatch100thSecond = 0;
@@ -431,14 +428,28 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 					hours = (hours + 1) % 24;
 				}
 			}
-			if(flagSec == 0){
+			if(flagSec == 0 && btn_count!=3){
 				printDigits(hours, minutes, seconds);
+				if(setting == 0 && btn_count == 4){
+					xil_printf("Adjusting Seconds");
+				}else if(setting == 1 && btn_count == 4){
+					xil_printf("Adjusting Hours");
+				}else if(setting == 2 && btn_count == 4){
+					xil_printf("Adjusting Minutes");
+				}
 			}
 		}
-		if(flagSec == 1){
-			printDigits(hours, minutes, seconds);
-		}
-	 }
+			if(flagSec == 1){
+				printDigits(hours, minutes, seconds);
+				if(setting == 0 && btn_count == 4){
+					xil_printf("Adjusting Seconds");
+				}else if(setting == 1 && btn_count == 4){
+					xil_printf("Adjusting Hours");
+				}else if(setting == 2 && btn_count == 4){
+					xil_printf("Adjusting Minutes");
+				}
+			}
+	    }
 
 	if(TmrCtrNumber == 0 && btn_count == 3 && on == 1){
 			stopWatch100thSecond++;
@@ -451,21 +462,26 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 					}
 				}
 			}
+
 			printDigits(stopWatchMinutes, stopWatchSeconds, stopWatch100thSecond);
+
+
+
 	}
 
 	XTmrCtr_ClearInterruptFlag(pTMRInst, TmrCtrNumber);
 }
 
-
 void setTime(){
     // determines the setting to adjust, for ex. i = 0 is seconds
 	int tmp_seconds;
 	int tmptmp_seconds;
-    int i = 0;
+	//int flagSec = 0;
+
 
     while (1)
     {
+
 
         // read button value
         btn_value = XGpio_DiscreteRead(&BTNInst, 1);
@@ -476,7 +492,7 @@ void setTime(){
         }
 
         // seconds
-        if (i == 0) {
+        if (setting == 0) {
         	//increments variable
             if (btn_value == A) {
                 seconds++;
@@ -499,12 +515,12 @@ void setTime(){
             }
             //change variable/setting to adjust
             if (btn_value == L) {
-                i++;
+                setting++;
                 for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
         // hours
-        else if (i == 1) {
+        else if (setting == 1) {
             if (btn_value == A) {
                 hours++;
                 tmp_seconds = seconds;
@@ -524,12 +540,12 @@ void setTime(){
                 flagSec = 0;
             }
             if (btn_value == L) {
-                i++;
+                setting++;
                 for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
         // minutes
-        else if (i == 2) {
+        else if (setting == 2) {
             if (btn_value == A) {
                 minutes++;
                 tmp_seconds = seconds;
@@ -550,21 +566,19 @@ void setTime(){
                 flagSec = 0;
             }
             if (btn_value == L) {
-                i = 0;
+                setting = 0;
                 for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
 
         //sets variable to zero if we exceeds wanted value
         if (seconds >= 60) {
-        	minutes++;
         	seconds = 0;
         }
         if (hours >= 24) {
         	hours = 0;
         }
         if (minutes >= 60) {
-        	hours++;
         	minutes = 0;
         }
 
@@ -584,14 +598,14 @@ int main (void)
 {
   int status;
 
-  XUartPs Uart_PS;
-  XUartPs_Config *Config;
+   XUartPs Uart_PS;
+   XUartPs_Config *Config;
 
-  Config = XUartPs_LookupConfig(XPAR_XUARTPS_0_DEVICE_ID);
-  XUartPs_CfgInitialize(&Uart_PS, Config, Config->BaseAddress);
+   Config = XUartPs_LookupConfig(XPAR_XUARTPS_0_DEVICE_ID);
+   XUartPs_CfgInitialize(&Uart_PS, Config, Config->BaseAddress);
 
-  // Override baud rate here
-  XUartPs_SetBaudRate(&Uart_PS, 921600);
+   // Override baud rate here
+   XUartPs_SetBaudRate(&Uart_PS, 921600);
 
   //XTmrCtr TMRInst;
   //----------------------------------------------------
@@ -641,11 +655,12 @@ int main (void)
 	  	case 1:
 	  		led_data = 0x8;
 	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
-	  		//specific mode function
+	  		on = 0;
 	  		break;
 	  	case 2:
 	  		led_data=0x4;
 	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	  		on = 0;
 	  		break;
 	  	case 3:
 	  		led_data=0x2;
@@ -655,6 +670,7 @@ int main (void)
 	  	case 4:
 	  		led_data=0x1;
 	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+	  		on = 0;
 	  		setTime();
 	  		break;
 	  	}
