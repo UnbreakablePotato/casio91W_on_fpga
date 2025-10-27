@@ -1,4 +1,5 @@
-/********************************************************************************************
+/*
+ /********************************************************************************************
 
 * VERSION HISTORY
 ********************************************************************************************
@@ -153,8 +154,16 @@ volatile int stopWatch100thSecond = 0;
 volatile int stopWatchSeconds = 0;
 volatile int stopWatchMinutes = 0;
 int lastBtnValue = 0;
-
+int setting = 0;
 int flagSec = 0;
+
+//Flags for alarm
+int timerHour = 0;
+int timerMinutes = 0;
+int timerSeconds = 0;
+int aSetting = 0;
+int aFlag = 0;
+
 
 
 XTime tStart, tEnd;
@@ -169,6 +178,7 @@ int InterruptSystemSetup(XScuGic *XScuGicInstancePtr);
 int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstancePtr, XGpio *GpioInstancePtr2);
 int InterruptSwitchSystemSetup(XScuGic *XScuGicInstancePtr);
 void stopWatch();
+void alarmMode();
 void setTime();
 void printDigits(int hour, int minute, int second);
 
@@ -199,7 +209,7 @@ void printDigits(int hour, int minute, int second) {
     int s1 = second / 10;
     int s2 = second % 10;
 
-    xil_printf("\033[H\033[J"); // fjerne alt på skærmen, virker ikke i sdk terminal, kun på puTTy terminal
+    xil_printf("\033[J\033[H"); // fjerne alt på skærmen, virker ikke i sdk terminal, kun på puTTy terminal
     for (int i = 0; i < 5; i++) {
         // Timer
         for (int j = 0; j < 5; j++) xil_printf("%c", digits[h1][i][j]);
@@ -427,14 +437,37 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 					hours = (hours + 1) % 24;
 				}
 			}
-			if(flagSec == 0 && btn_count!=3){
+			if(flagSec == 0 && btn_count!=3 && btn_count != 2){
 				printDigits(hours, minutes, seconds);
+				if(timerHour != 0 || timerMinutes != 0 || timerSeconds != 0){
+					if(timerHour == hours && timerMinutes == minutes && timerSeconds == seconds){
+						aFlag = 1;
+					}
+				}
+				if(setting == 0 && btn_count == 4){
+					xil_printf("Adjusting Seconds");
+				}else if(setting == 1 && btn_count == 4){
+					xil_printf("Adjusting Hours");
+				}else if(setting == 2 && btn_count == 4){
+					xil_printf("Adjusting Minutes");
+				}
 			}
 		}
-		if(flagSec == 1){
-						printDigits(hours, minutes, seconds);
-		}
-
+			if(flagSec == 1){
+				printDigits(hours, minutes, seconds);
+				if(timerHour != 0 || timerMinutes != 0 || timerSeconds != 0){
+					if(timerHour == hours && timerMinutes == minutes && timerSeconds == seconds){
+						aFlag = 1;
+					}
+				}
+				if(setting == 0 && btn_count == 4){
+					xil_printf("Adjusting Seconds");
+				}else if(setting == 1 && btn_count == 4){
+					xil_printf("Adjusting Hours");
+				}else if(setting == 2 && btn_count == 4){
+					xil_printf("Adjusting Minutes");
+				}
+			}
 	    }
 
 	if(TmrCtrNumber == 0 && btn_count == 3 && on == 1){
@@ -453,9 +486,133 @@ void TMR_Intr_Handler(void *InstancePtr, u8 TmrCtrNumber)
 
 
 
+	}else if(TmrCtrNumber == 0 && btn_count == 2){
+		stopWatch100thSecond++;
+			if(stopWatch100thSecond >= 99){
+				stopWatch100thSecond = 0;
+				if(++seconds >= 60){
+					seconds = 0;
+		printDigits(timerHour, timerMinutes,timerSeconds);
+				}
 	}
 
 	XTmrCtr_ClearInterruptFlag(pTMRInst, TmrCtrNumber);
+}
+}
+
+void alarmMode(){
+
+		//int flagSec = 0;
+	printDigits(timerHour,timerMinutes,timerSeconds);
+	int tmp_seconds;
+	int tmptmp_seconds;
+
+	while (1)
+	    {
+
+
+	        // read button value
+	        btn_value = XGpio_DiscreteRead(&BTNInst, 1);
+
+	        // exit if next mode is chosen
+	        if (btn_count != 2) {
+	            break;
+	        }
+
+	        // seconds
+	        if (aSetting == 0) {
+	        	//increments variable
+	            if (btn_value == A) {
+	                timerSeconds++;
+	                tmp_seconds = timerSeconds;
+	                tmptmp_seconds = tmp_seconds;
+	                // debounce so one press = one increment, important. without it we increment several times
+	                while (XGpio_DiscreteRead(&BTNInst, 1) == A){
+	                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+	                		flagSec = 1;
+	                		timerSeconds++;
+	                        if (timerSeconds >= 60) {
+	                        	timerMinutes++;
+	                        	timerSeconds = 0;
+	                        }
+	                		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+	                	}
+	                	tmp_seconds = timerSeconds;
+	                }
+	                printDigits(timerHour,timerMinutes,timerSeconds);
+	            }
+	            //change variable/setting to adjust
+	            if (btn_value == L) {
+	            	aSetting++;
+	                for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+	            }
+	        }
+	        // hours
+	        else if (aSetting == 1) {
+	            if (btn_value == A) {
+	                timerHour++;
+	                tmp_seconds = timerSeconds;
+	                tmptmp_seconds = tmp_seconds;
+	                // debounce so one press = one increment, important. without it we increment several times
+	                while (XGpio_DiscreteRead(&BTNInst, 1) == A){
+	                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+	                		flagSec = 1;
+	                		timerHour++;
+	                        if (timerHour >= 24) {
+	                        	timerHour = 0;
+	                        }
+	                		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+	                	}
+	                	tmp_seconds = timerSeconds;
+	                }
+	                printDigits(timerHour,timerMinutes,timerSeconds);
+	            }
+	            if (btn_value == L) {
+	            	aSetting++;
+	                for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+	            }
+	        }
+	        // minutes
+	        else if (aSetting == 2) {
+	            if (btn_value == A) {
+	            	timerMinutes++;
+	                tmp_seconds = timerSeconds;
+	                tmptmp_seconds = tmp_seconds;
+	                // debounce so one press = one increment, important. without it we increment several times
+	                while (XGpio_DiscreteRead(&BTNInst, 1) == A){
+	                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+	                		flagSec = 1;
+	                		timerMinutes++;
+	                        if (timerMinutes >= 60) {
+	                        	timerHour++;
+	                        	timerMinutes = 0;
+	                        }
+	                		for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+	                	}
+	                	tmp_seconds = timerSeconds;
+	                }
+	                printDigits(timerHour,timerMinutes,timerSeconds);
+	            }
+	            if (btn_value == L) {
+	            	aSetting = 0;
+	                for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
+	            }
+	        }
+
+	        //sets variable to zero if we exceeds wanted value
+	        if (timerSeconds >= 60) {
+	        	timerSeconds = 0;
+	        }
+	        if (timerHour >= 24) {
+	        	timerHour = 0;
+	        }
+	        if (timerMinutes >= 60) {
+	        	timerMinutes = 0;
+	        }
+
+	    }
+
+	    return;
 }
 
 void setTime(){
@@ -463,10 +620,11 @@ void setTime(){
 	int tmp_seconds;
 	int tmptmp_seconds;
 	//int flagSec = 0;
-    int i = 0;
+
 
     while (1)
     {
+
 
         // read button value
         btn_value = XGpio_DiscreteRead(&BTNInst, 1);
@@ -477,7 +635,7 @@ void setTime(){
         }
 
         // seconds
-        if (i == 0) {
+        if (setting == 0) {
         	//increments variable
             if (btn_value == A) {
                 seconds++;
@@ -485,7 +643,7 @@ void setTime(){
                 tmptmp_seconds = tmp_seconds;
                 // debounce so one press = one increment, important. without it we increment several times
                 while (XGpio_DiscreteRead(&BTNInst, 1) == A){
-                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+                	if((flagSec == 1 || (tmp_seconds -= tmptmp_seconds) >= 3)){
                 		flagSec = 1;
                 		seconds++;
                         if (seconds >= 60) {
@@ -500,19 +658,19 @@ void setTime(){
             }
             //change variable/setting to adjust
             if (btn_value == L) {
-                i++;
+                setting++;
                 for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
         // hours
-        else if (i == 1) {
+        else if (setting == 1) {
             if (btn_value == A) {
                 hours++;
                 tmp_seconds = seconds;
                 tmptmp_seconds = tmp_seconds;
                 // debounce so one press = one increment, important. without it we increment several times
                 while (XGpio_DiscreteRead(&BTNInst, 1) == A){
-                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+                	if((flagSec == 1 || (tmp_seconds -= tmptmp_seconds) >= 3)){
                 		flagSec = 1;
                 		hours++;
                         if (hours >= 24) {
@@ -525,19 +683,19 @@ void setTime(){
                 flagSec = 0;
             }
             if (btn_value == L) {
-                i++;
+                setting++;
                 for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
         // minutes
-        else if (i == 2) {
+        else if (setting == 2) {
             if (btn_value == A) {
                 minutes++;
                 tmp_seconds = seconds;
                 tmptmp_seconds = tmp_seconds;
                 // debounce so one press = one increment, important. without it we increment several times
                 while (XGpio_DiscreteRead(&BTNInst, 1) == A){
-                	if(((tmp_seconds -= tmptmp_seconds) >= 3) || flagSec == 1){
+                	if((flagSec == 1 || (tmp_seconds -= tmptmp_seconds) >= 3)){
                 		flagSec = 1;
                 		minutes++;
                         if (minutes >= 60) {
@@ -551,21 +709,19 @@ void setTime(){
                 flagSec = 0;
             }
             if (btn_value == L) {
-                i = 0;
+                setting = 0;
                 for(btn_delay = 0; btn_delay < BTN_DEBOUNCE_TIME; btn_delay++);
             }
         }
 
         //sets variable to zero if we exceeds wanted value
         if (seconds >= 60) {
-        	minutes++;
         	seconds = 0;
         }
         if (hours >= 24) {
         	hours = 0;
         }
         if (minutes >= 60) {
-        	hours++;
         	minutes = 0;
         }
 
@@ -643,11 +799,27 @@ int main (void)
 	  		led_data = 0x8;
 	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
 	  		on = 0;
+			if(timerHour != 0 || timerMinutes != 0 || timerSeconds != 0){
+				if(timerHour == hours && timerMinutes == minutes && timerSeconds == seconds){
+					if(aFlag == 1){
+						led_data = 0xF;
+						XGpio_DiscreteWrite(&LEDInst, 1, led_data);
+
+						btn_value = XGpio_DiscreteRead(&BTNInst, 1);
+
+						if(btn_value == A || btn_value == C || btn_value == L){
+							aFlag = 0;
+						}
+
+					}
+				}
+			}
 	  		break;
 	  	case 2:
 	  		led_data=0x4;
 	  		XGpio_DiscreteWrite(&LEDInst, 1, led_data);
 	  		on = 0;
+	  		alarmMode();
 	  		break;
 	  	case 3:
 	  		led_data=0x2;
@@ -768,4 +940,3 @@ int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioInstanceP
 
 	return XST_SUCCESS;
 }
-
